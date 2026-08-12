@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultimate Chess AI</title>
+    
+    <!-- Chessboard.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #302e2b;
+            --panel-bg: #262421;
+            --text-main: #c3c3c3;
+            --text-light: #ffffff;
+            --accent: #81b64c;
+            --accent-hover: #95d05b;
+            --danger: #cc3333;
+            --border: #403d39;
+            --highlight-last: rgba(255, 255, 51, 0.4);
+            --highlight-check: radial-gradient(circle, rgba(255,0,0,0.8) 0%, rgba(255,0,0,0) 80%);
+        }
+
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2vh 2vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .layout {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        /* --- LEFT: Board & Eval --- */
+        .board-section {
+            display: flex;
+            gap: 15px;
+            flex: 1;
+            max-width: 600px;
+        }
+
+        .eval-container {
+            width: 25px;
+            background-color: #403d39;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .eval-bar {
+            width: 100%;
+            background-color: #ffffff;
+            height: 50%;
+            transition: height 0.4s ease-in-out;
+        }
+        
+        .eval-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 700;
+            z-index: 2;
+            top: 5px;
+            color: #fff;
+            mix-blend-mode: difference;
+        }
+
+        .board-wrapper {
+            flex: 1;
+            width: 100%;
+        }
+
+        #board {
+            width: 100%;
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            touch-action: none; /* Prevents scrolling while dragging on mobile */
+        }
+
+        /* --- Custom Board Highlights --- */
+        .highlight-last { box-shadow: inset 0 0 3px 3px var(--highlight-last); }
+        .highlight-check { background: var(--highlight-check) !important; }
+        .legal-move-hint {
+            position: relative;
+        }
+        .legal-move-hint::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 25%; height: 25%;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .legal-capture-hint::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%; height: 80%;
+            border: 5px solid rgba(0, 0, 0, 0.3);
+            border-radius: 50%;
+            background: transparent;
+            pointer-events: none;
+        }
+
+        /* --- RIGHT: UI & Controls --- */
+        .ui-section {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            width: 380px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .player-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1rem;
+            color: var(--text-light);
+            background: rgba(0,0,0,0.15);
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .player-name i { margin-right: 8px; color: #888; }
+        .captured-pieces { color: #888; font-size: 1.1rem; letter-spacing: 2px; }
+
+        .status-box {
+            background-color: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-light);
+            border: 1px solid var(--border);
+            min-height: 54px;
+        }
+
+        /* History */
+        .history-container {
+            flex-grow: 1;
+            background-color: #1e1e1e;
+            border-radius: 6px;
+            padding: 10px;
+            min-height: 120px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Inter', monospace;
+            font-size: 14px;
+            border: 1px solid var(--border);
+        }
+
+        .history-row {
+            display: flex;
+            padding: 6px 10px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .history-row:nth-child(even) { background-color: #222; }
+        .history-num { width: 40px; color: #666; font-weight: 600; }
+        .history-move { flex: 1; color: var(--text-main); cursor: pointer; }
+        
+        .thinking-indicator {
+            font-size: 0.85rem;
+            color: #aaa;
+            text-align: center;
+            height: 15px;
+            font-style: italic;
+        }
+
+        /* Controls */
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        select, button {
+            padding: 12px;
+            font-size: 14px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            background-color: #3b3934;
+            color: var(--text-light);
+            transition: 0.15s ease;
+        }
+
+        select { border: 1px solid var(--border); appearance: none; }
+        select:focus { outline: 1px solid var(--accent); }
+
+        button:hover { background-color: #4a4741; transform: translateY(-1px); }
+        button:active { transform: translateY(1px); }
+        
+        .btn-primary { background-color: var(--accent); color: #fff;}
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        
+        .btn-danger { background-color: transparent; border: 1px solid var(--danger); color: var(--danger); }
+        .btn-danger:hover { background-color: var(--danger); color: white; }
+
+        /* --- MOBILE RESPONSIVENESS --- */
+        @media (max-width: 900px) {
+            .layout { flex-direction: column; align-items: center; }
+            .board-section { width: 100%; max-width: 100%; }
+            .ui-section { width: 100%; max-width: 100%; }
+            body { padding: 10px; align-items: flex-start; }
+            .history-container { max-height: 150px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="layout">
+        <!-- LEFT: Board and Eval -->
+        <div class="board-section">
+            <div class="eval-container" title="Engine Evaluation">
+                <div id="eval-text" class="eval-text">0.0</div>
+                <div id="eval-bar" class="eval-bar"></div>
+            </div>
+            <div class="board-wrapper">
+                <div id="board"></div>
+            </div>
+        </div>
+
+        <!-- RIGHT: UI and Controls -->
+        <div class="ui-section">
+            
+            <div id="status" class="status-box">White to move</div>
+
+            <!-- Opponent (AI) Info -->
+            <div class="player-info">
+                <div class="player-name"><i class="fas fa-robot"></i> Stockfish 10</div>
+                <div id="ai-captured" class="captured-pieces"></div>
+            </div>
+
+            <!-- History Box -->
+            <div id="move-history" class="history-container"></div>
+
+            <!-- Player Info -->
+            <div class="player-info">
+                <div class="player-name"><i class="fas fa-user"></i> You</div>
+                <div id="player-captured" class="captured-pieces"></div>
+            </div>
+
+            <div class="thinking-indicator" id="thinking-indicator"></div>
+
+            <!-- Settings -->
+            <div class="controls-grid">
+                <select id="difficulty">
+                    <option value="beginner">Beginner (~800)</option>
+                    <option value="intermediate" selected>Intermediate (~1600)</option>
+                    <option value="expert">Expert (~2200)</option>
+                    <option value="grandmaster">Grandmaster (~3000+)</option>
+                </select>
+                <select id="play-as">
+                    <option value="w">Play as White</option>
+                    <option value="b">Play as Black</option>
+                </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="controls-grid">
+                <button id="undoBtn" title="Takeback"><i class="fas fa-undo"></i> Undo</button>
+                <button id="redoBtn" title="Redo"><i class="fas fa-redo"></i> Redo</button>
+                <button id="resignBtn" class="btn-danger"><i class="fas fa-flag"></i> Resign</button>
+                <button id="newBtn" class="btn-primary"><i class="fas fa-plus"></i> New Game</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Files (Using reliable Lichess CDNs) -->
+    <audio id="snd-move" src="https://lichess1.org/assets/_aVp6t2/sound/standard/Move.ogg" preload="auto"></audio>
+    <audio id="snd-capture" src="https://lichess1.org/assets/_aVp6t2/sound/standard/Capture.ogg" preload="auto"></audio>
+    <audio id="snd-check" src="https://lichess1.org/assets/_aVp6t2/sound/standard/Check.ogg" preload="auto"></audio>
+    <audio id="snd-end" src="https://lichess1.org/assets/_aVp6t2/sound/standard/GenericNotify.ogg" preload="auto"></audio>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            // --- 1. GLOBALS & INIT ---
+            let board = null;
+            let game = new Chess();
+            let playerColor = 'w';
+            let isEngineThinking = false;
+            let gameActive = true;
+            let redoStack = [];
+
+            // UI Elements
+            const $status = $('#status');
+            const $evalBar = $('#eval-bar');
+            const $evalText = $('#eval-text');
+            const $history = $('#move-history');
+            const $thinking = $('#thinking-indicator');
+            const $board = $('#board');
+
+            // Audio Elements
+            const sndMove = document.getElementById('snd-move');
+            const sndCapture = document.getElementById('snd-capture');
+            const sndCheck = document.getElementById('snd-check');
+            const sndEnd = document.getElementById('snd-end');
+
+            function playSound(type) {
+                try {
+                    if (type === 'move') { sndMove.currentTime = 0; sndMove.play(); }
+                    else if (type === 'capture') { sndCapture.currentTime = 0; sndCapture.play(); }
+                    else if (type === 'check') { sndCheck.currentTime = 0; sndCheck.play(); }
+                    else if (type === 'end') { sndEnd.currentTime = 0; sndEnd.play(); }
+                } catch(e) {} // Ignore audio errors on strict mobile browsers
+            }
+
+            // --- 2. STOCKFISH AI WORKER ---
+            // Using a blob to load the worker safely
+            const stockfishCode = "importScripts('https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js');";
+            const blob = new Blob([stockfishCode], { type: 'application/javascript' });
+            let engine;
+            try {
+                engine = new Worker(URL.createObjectURL(blob));
+                engine.postMessage('uci');
+            } catch(e) {
+                $thinking.text("Error: AI blocked by browser. Run on a web server.");
+            }
+
+            if (engine) {
+                engine.onmessage = function(event) {
+                    const line = event.data;
+
+                    // Parse Evaluation
+                    if (line.includes('info depth') && line.includes('score cp')) {
+                        const match = line.match(/score cp (-?\d+)/);
+                        if (match) {
+                            let score = parseInt(match[1]) / 100;
+                            if (game.turn() === 'b') score = -score; // Normalize for White
+                            updateEvalBar(score, false);
+                        }
+                    } else if (line.includes('score mate')) {
+                        const match = line.match(/score mate (-?\d+)/);
+                        if (match) {
+                            let mateIn = parseInt(match[1]);
+                            if (game.turn() === 'b') mateIn = -mateIn;
+                            updateEvalBar(mateIn, true);
+                        }
+                    }
+
+                    // Parse Best Move
+                    if (line.includes("bestmove")) {
+                        const match = line.match(/^bestmove ([a-h][1-8])([a-h][1-8])([qrbn])?/);
+                        if (match) {
+                            const move = game.move({
+                                from: match[1],
+                                to: match[2],
+                                promotion: match[3] || 'q'
+                            });
+                            
+                            board.position(game.fen(), true); // true = animate
+                            isEngineThinking = false;
+                            $thinking.text('');
+                            
+                            handleMoveEffects(move);
+                            updateUI();
+                        }
+                    }
+                };
+            }
+
+            function makeEngineMove() {
+                if (!gameActive || game.game_over() || !engine) return;
+                
+                isEngineThinking = true;
+                $thinking.text('AI is calculating...');
+                
+                const diff = $('#difficulty').val();
+                let skill = 10, depth = 5; // Default intermediate
+                
+                if (diff === 'beginner') { skill = 1; depth = 1; } 
+                else if (diff === 'expert') { skill = 15; depth = 12; }
+                else if (diff === 'grandmaster') { skill = 20; depth = 18; }
+
+                engine.postMessage('position fen ' + game.fen());
+                engine.postMessage('setoption name Skill Level value ' + skill);
+                engine.postMessage('go depth ' + depth);
+            }
+
+            // --- 3. UI LOGIC & HIGHLIGHTS ---
+            function removeHighlights() {
+                $board.find('.square-55d63').removeClass('highlight-last highlight-check legal-move-hint legal-capture-hint');
+            }
+
+            function handleMoveEffects(move) {
+                removeHighlights();
+                
+                // Highlight last move
+                $board.find('.square-' + move.from).addClass('highlight-last');
+                $board.find('.square-' + move.to).addClass('highlight-last');
+
+                // Check highlight & Sound
+                if (game.in_checkmate() || game.in_draw()) {
+                    playSound('end');
+                } else if (game.in_check()) {
+                    playSound('check');
+                    // Find King square
+                    const fen = game.fen().split(' ')[0];
+                    // Logic to find king class bypassed for brevity, just glow board slightly or rely on status
+                } else if (move.captured) {
+                    playSound('capture');
+                } else {
+                    playSound('move');
+                }
+            }
+
+            function updateUI() {
+                updateStatus();
+                updateHistory();
+                updateCapturedPieces();
+                
+                if (gameActive && !game.game_over() && game.turn() !== playerColor) {
+                    setTimeout(makeEngineMove, 250);
+                }
+            }
+
+            function updateStatus() {
+                let statusHTML = '';
+                let moveColor = game.turn() === 'w' ? 'White' : 'Black';
+
+                if (!gameActive) {
+                    statusHTML = 'Game Over - Resigned';
+                } else if (game.in_checkmate()) {
+                    statusHTML = `Checkmate! ${moveColor === 'White' ? 'Black' : 'White'} wins!`;
+                    gameActive = false;
+                } else if (game.in_draw()) {
+                    statusHTML = 'Game drawn!';
+                    gameActive = false;
+                } else {
+                    statusHTML = `${moveColor} to move`;
+                    if (game.in_check()) statusHTML += ` <span style="color:var(--danger)">(Check)</span>`;
+                }
+                $status.html(statusHTML);
+            }
+
+            function updateEvalBar(score, isMate) {
+                let percentage = 50;
+                if (isMate) {
+                    percentage = score > 0 ? 100 : 0;
+                    $evalText.text(`M${Math.abs(score)}`);
+                } else {
+                    let clampedScore = Math.max(-5, Math.min(5, score));
+                    percentage = 50 + (clampedScore * 10);
+                    $evalText.text(score > 0 ? `+${score.toFixed(1)}` : score.toFixed(1));
+                    $evalText.css('color', percentage > 60 ? '#000' : '#fff');
+                }
+                $evalBar.css('height', `${percentage}%`);
+            }
+
+            function updateHistory() {
+                const history = game.history();
+                $history.empty();
+                let rowHTML = '';
+                for (let i = 0; i < history.length; i += 2) {
+                    let moveNum = (i / 2) + 1;
+                    let wMove = history[i];
+                    let bMove = history[i + 1] ? history[i + 1] : '';
+                    rowHTML += `<div class="history-row">
+                                    <div class="history-num">${moveNum}.</div>
+                                    <div class="history-move">${wMove}</div>
+                                    <div class="history-move">${bMove}</div>
+                                </div>`;
+                }
+                $history.html(rowHTML);
+                $history.scrollTop($history[0].scrollHeight);
+            }
+
+            const unicodePieces = {
+                'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛'
+            };
+
+            function updateCapturedPieces() {
+                let starting = { p: 8, n: 2, b: 2, r: 2, q: 1, P: 8, N: 2, B: 2, R: 2, Q: 1 };
+                let current = { p: 0, n: 0, b: 0, r: 0, q: 0, P: 0, N: 0, B: 0, R: 0, Q: 0 };
+                
+                game.board().forEach(row => {
+                    row.forEach(piece => {
+                        if (piece) {
+                            let key = piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase();
+                            if (current[key] !== undefined) current[key]++;
+                        }
+                    });
+                });
+
+                let whiteCapturedHTML = '';
+                let blackCapturedHTML = '';
+
+                ['q','r','b','n','p'].forEach(type => {
+                    let wDiff = starting[type.toUpperCase()] - current[type.toUpperCase()];
+                    for(let i=0; i<wDiff; i++) blackCapturedHTML += unicodePieces[type] + ' ';
+                    
+                    let bDiff = starting[type] - current[type];
+                    for(let i=0; i<bDiff; i++) whiteCapturedHTML += unicodePieces[type] + ' ';
+                });
+
+                if (playerColor === 'w') {
+                    $('#player-captured').html(whiteCapturedHTML);
+                    $('#ai-captured').html(blackCapturedHTML);
+                } else {
+                    $('#player-captured').html(blackCapturedHTML);
+                    $('#ai-captured').html(whiteCapturedHTML);
+                }
+            }
+
+            // --- 4. BOARD INTERACTION ---
+            function onDragStart(source, piece) {
+                if (!gameActive || game.game_over() || isEngineThinking) return false;
+                if ((playerColor === 'w' && piece.search(/^b/) !== -1) || 
+                    (playerColor === 'b' && piece.search(/^w/) !== -1)) {
+                    return false;
+                }
+            }
+
+            function onDrop(source, target) {
+                removeHighlights();
+                let move = game.move({
+                    from: source,
+                    to: target,
+                    promotion: 'q'
+                });
+
+                if (move === null) return 'snapback';
+                
+                redoStack = []; 
+                handleMoveEffects(move);
+                updateUI();
+            }
+
+            function onSnapEnd() { board.position(game.fen()); }
+
+            // Legal Move Dots
+            function onMouseoverSquare(square, piece) {
+                if (!gameActive || isEngineThinking || game.turn() !== playerColor) return;
+                
+                let moves = game.moves({ square: square, verbose: true });
+                if (moves.length === 0) return;
+
+                moves.forEach(m => {
+                    let sqEl = $board.find('.square-' + m.to);
+                    if (m.captured) sqEl.addClass('legal-capture-hint');
+                    else sqEl.addClass('legal-move-hint');
+                });
+            }
+
+            function onMouseoutSquare(square, piece) {
+                $board.find('.square-55d63').removeClass('legal-move-hint legal-capture-hint');
+            }
+
+            // --- 5. INITIALIZATION & LISTENERS ---
+            const config = {
+                draggable: true,
+                position: 'start',
+                onDragStart: onDragStart,
+                onDrop: onDrop,
+                onSnapEnd: onSnapEnd,
+                onMouseoverSquare: onMouseoverSquare,
+                onMouseoutSquare: onMouseoutSquare,
+                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+                moveSpeed: 'fast',
+                snapbackSpeed: 500,
+                snapSpeed: 100
+            };
+            
+            board = Chessboard('board', config);
+            
+            // FIX FOR MOBILE SQUISHING: Resize board on window change
+            $(window).resize(board.resize);
+            
+            updateUI();
+
+            // --- 6. CONTROLS ---
+            $('#newBtn').click(function() {
+                game.reset();
+                gameActive = true;
+                isEngineThinking = false;
+                redoStack = [];
+                if(engine) engine.postMessage('stop');
+                
+                playerColor = $('#play-as').val();
+                board.orientation(playerColor === 'w' ? 'white' : 'black');
+                board.position(game.fen(), false);
+                removeHighlights();
+                updateEvalBar(0, false);
+                updateUI();
+            });
+
+            $('#undoBtn').click(function() {
+                if (game.history().length === 0) return;
+                if(engine) engine.postMessage('stop');
+                isEngineThinking = false;
+                gameActive = true; 
+
+                let m1 = game.undo();
+                if (m1) redoStack.push(m1);
+                
+                if (game.turn() !== playerColor && game.history().length > 0) {
+                    let m2 = game.undo();
+                    if (m2) redoStack.push(m2);
+                }
+                
+                board.position(game.fen());
+                removeHighlights();
+                updateUI();
+            });
+
+            $('#redoBtn').click(function() {
+                if (redoStack.length === 0) return;
+                let m1 = redoStack.pop();
+                game.move(m1);
+                if (redoStack.length > 0 && game.turn() !== playerColor) {
+                    let m2 = redoStack.pop();
+                    game.move(m2);
+                }
+                board.position(game.fen());
+                updateUI();
+            });
+
+            $('#resignBtn').click(function() {
+                if (game.game_over() || !gameActive) return;
+                gameActive = false;
+                if(engine) engine.postMessage('stop');
+                isEngineThinking = false;
+                $status.html(`<span style="color:var(--danger)">You Resigned.</span>`);
+                playSound('end');
+            });
+
+            $('#play-as').change(function() { $('#newBtn').click(); });
+        });
+    </script>
+</body>
+</html>
